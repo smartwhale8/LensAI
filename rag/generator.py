@@ -1,0 +1,60 @@
+from typing import List, Dict
+import torch
+from ctransformers import AutoModelForCausalLLM
+
+class Generator:
+    def __init__(self, model_name: str, max_length: int = 512):
+        self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        # Set gpu_layers to the number of layers to offload to GPU. Set to 0 if no GPU acceleration is available on your system.
+        self.model = AutoModelForCausalLM.from_pretrained(
+                "TheBloke/Llama-2-7b-Chat-GGUF", 
+                model_file="llama-2-7b-chat.q4_K_M.gguf", 
+                model_type="llama", 
+                gpu_layers=50
+            )
+        self.max_length = max_length
+        self.chat_history = List[Dict[str, str]] = []
+
+    def generate(self, query: str, context: str) -> str:
+        # Construct a more structured prompt; longer prompts are seen to take a lot of time to generate
+        system_message = "You are LegalGenie, an AI legal assistant. Provide only factual information directly from the given context. Do not add opinions, suggestions, or information not explicitly stated in the context."
+        
+        context_prompt = f"Relevant legal context: {context[:500]}\n\nUse this information to inform your response, but do not quote it directly unless necessary."
+        
+        human_message = f"Human: {query}"
+        
+        ai_prompt = "LegalGenie: Based on the provided legal context and the query, here's my response:"
+
+        # Combine all parts into a single prompt
+        full_prompt = f"{system_message}\n\n{context_prompt}\n\n{human_message}\n\n{ai_prompt}"
+
+        # Tokenize the input
+        #inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.device)
+        
+        # Generate the output
+        with torch.no_grad():
+            outputs = self.model(
+                full_prompt
+                max_new_tokens=self.max_length, # Increase for more comprehensive responses
+                temperature=0.3, # Lower temperature for more deterministic responses; helps stick to the legal context
+                top_k=50,
+                top_p=0.95
+            )
+        
+        # Decode the generated text
+        #full_output = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        # Consume the generator to get the full output
+        full_output = full_prompt + ''.join(outputs)
+
+        # Extract the generated response
+        response = full_output[len(full_prompt):].strip()
+        
+        # Update chat history
+        self.chat_history.append({"role": "human", "content": query})
+        self.chat_history.append({"role": "ai", "content": response})
+        
+        return response
+
+    def clear_chat_history(self):
+        self.chat_history.clear()

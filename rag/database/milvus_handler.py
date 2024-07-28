@@ -7,6 +7,7 @@ class MilvusHandler:
         self.host = host
         self.port = port
         self.client = None
+        self.default_field = "embedding"  # Default field for vector embeddings
         self.schemas = self._initialize_schemas()
         self.index_params = {
             "index_type": "IVF_FLAT",
@@ -14,7 +15,8 @@ class MilvusHandler:
             "params": {"nlist": 1024}
         }
         self.search_params = {
-            "metric_type": "L2"  # Ensure this matches the index metric_type
+            "metric_type": "L2",  # Ensure this matches the index metric_type
+            "params": {"nprobe": 10} # Number of clusters to search
         }
         self.connect()
 
@@ -101,16 +103,23 @@ class MilvusHandler:
         else:
             print(f"Collection '{collection_name}' does not exist.")
             return None
-
-    def search(self, vectors, top_k):
+  
+    def search(self, collection_name, vectors, top_k, field_name=None, search_params=None, output_fields=None):
         # Ensure the collection exists
-        if not utility.has_collection(self.collection_name, using="default"):
-            print(f"Collection '{self.collection_name}' does not exist. Please create it first.")
+        if not utility.has_collection(collection_name, using="default"):
+            print(f"Collection '{collection_name}' does not exist. Please create it first.")
             return
         # Get the collection
-        collection = Collection(self.collection_name, using="default")
+        collection = Collection(collection_name, using="default")
+
+        # Use provided field_name if available, else use default
+        field_name = field_name if field_name else self.default_field
+
+        # Use provided search_params if available, else use default
+        search_params = search_params if search_params else self.search_params
+
         # Perform the search
-        results = collection.search(vectors, "embedding", self.search_params, top_k)
+        results = collection.search(vectors, field_name, search_params, top_k, output_fields=output_fields)
         return results
 
     def delete(self, collection_name):

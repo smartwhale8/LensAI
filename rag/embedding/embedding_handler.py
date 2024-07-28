@@ -19,8 +19,9 @@ class EmbeddingHandler:
 
     def generate_embeddings(self, texts):
         # Generate embeddings
-        embeddings = self.model.encode(texts, convert_to_tensor=True) # Convert to tensor
-        embeddings = embeddings.cpu().numpy() # Ensure embeddings are moved to CPU before converting to numpy array
+        with torch.no_grad():
+            embeddings = self.model.encode(texts, convert_to_tensor=True) # Convert to tensor
+            embeddings = embeddings.cpu().numpy() # Ensure embeddings are moved to CPU before converting to numpy array
 
         return embeddings
     
@@ -79,6 +80,7 @@ class EmbeddingHandler:
                     return False
 
         milvus_collection.flush()
+        # index params define how the vectors are organized and stored in the DB.
         index_params = {
             "metric_type": "IP",
             "index_type": "IVF_FLAT",
