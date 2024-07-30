@@ -1,5 +1,5 @@
 from pymilvus import DataType, CollectionSchema, FieldSchema, Collection, connections, utility
-from pymilvus.orm.exceptions import SchemaNotReadyException
+from pymilvus.exceptions import SchemaNotReadyException
 
 
 class MilvusHandler:
@@ -26,6 +26,10 @@ class MilvusHandler:
         print(f"Connected to Milvus at {self.host}:{self.port}")
 
     def _initialize_schemas(self):
+        # Define schemas for all collections
+        """
+        Defines how the vector data (e.g. embeddings) and associated metadata should be stored in Milvus.
+        """
         return {
             "legal_acts": [
                 FieldSchema(name="act_id", dtype=DataType.INT64, max_length=100, is_primary=True, description="Unique identifier for the act"),

@@ -1,0 +1,44 @@
+{
+    "mongodb": {
+        "host": "localhost",
+        "port": 27017,
+        "database": "rag_lens_db"
+    },
+    "milvus": {
+        "host": "localhost",
+        "port": 19530,
+        "collections": {
+            "legal_acts": {
+                "collection_name": "legal_acts",
+                "index_params": {
+                    "index_type": "IVF_FLAT",
+                    "metric_type": "L2",
+                    "params": {"nlist": 128}
+                },
+                "search_params": {
+                    "metric_type": "L2",
+                    "params": {"nprobe": 10}
+                }
+            },
+            "case_files": {
+                "collection_name": "case_files",
+                "index_params": {
+                    "index_type": "IVF_FLAT",
+                    "metric_type": "L2",
+                    "params": {"nlist": 128}
+                },
+                "search_params": {
+                    "metric_type": "L2",
+                    "params": {"nprobe": 10}
+                }
+            }
+        }
+    },
+    "embedding": {
+        "model_name": "bert-base-uncased",
+        "device": "cuda"
+    },
+    "generator": {
+        "model_name": "gpt-3"
+    }
+}

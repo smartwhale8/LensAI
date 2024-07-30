@@ -1,9 +1,9 @@
 from typing import List, Dict
 import torch
-from ctransformers import AutoModelForCausalLLM
+from ctransformers import AutoModelForCausalLM
 
 class Generator:
-    def __init__(self, model_name: str, max_length: int = 512):
+    def __init__(self, max_length: int = 512):
         self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
         # Set gpu_layers to the number of layers to offload to GPU. Set to 0 if no GPU acceleration is available on your system.
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -34,7 +34,7 @@ class Generator:
         # Generate the output
         with torch.no_grad():
             outputs = self.model(
-                full_prompt
+                full_prompt,
                 max_new_tokens=self.max_length, # Increase for more comprehensive responses
                 temperature=0.3, # Lower temperature for more deterministic responses; helps stick to the legal context
                 top_k=50,

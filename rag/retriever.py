@@ -17,6 +17,30 @@ class CollectionConfig:
     chunk_overlap: int = 50
     vector_field: str = "embedding"
 
+class CollectionConfigFactory:
+    @staticmethod
+    def get_config(collection_type: str) -> CollectionConfig:
+        if collection_type == "legal_acts":
+            return CollectionConfig(
+                name="legal_acts",
+                id_field="act_id",
+                text_field="text",
+                meta_fields=["short_title", "long_title", "act_year"],
+                output_fields=["short_title", "long_title", "act_year"],
+                chunk_size=200,
+                chunk_overlap=50
+            )
+        elif collection_type == "case_files":
+            return CollectionConfig(
+                name="case_files",
+                id_field="case_id",
+                text_field="text",
+                meta_fields=["court", "case_number", "year"],
+                output_fields=["court", "case_number", "year"]
+            )
+        else:
+            raise ValueError(f"Collection type '{collection_type}' not supported")
+
 class Retriever:
     def __init__(
         self,
