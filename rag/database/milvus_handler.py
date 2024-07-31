@@ -45,6 +45,10 @@ class MilvusHandler:
         # Define schemas for all collections
         """
         Defines how the vector data (e.g. embeddings) and associated metadata should be stored in Milvus.
+
+        Primary Key Uniqueness:
+            If a document with the same primary key is inserted multiple times, the latest version will overwrite the previous one.
+            Insert actually becomes upsert in this case.
         """
         return {
             "legal_acts": [
