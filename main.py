@@ -4,6 +4,8 @@ import argparse
 import os
 from tqdm import tqdm
 import json
+from logging_config import setup_logging
+import logging
 
 class RAGOrchestrator:
     def __init__(self, mongodb, milvus, embedding, retriever, generator):
@@ -74,15 +76,6 @@ def run_rag_pipeline():
 
     # Run the retreival and generation loop
 
-def count_pdf_files(folder_path):
-    pdf_count = 0
-    for root, dirs, files in os.walk(folder_path):
-        print(f"root: {root}, and dirs: {dirs} with files: {len(files)}")
-        for file in files:
-            if file.lower().endswith('.pdf'):
-                pdf_count += 1
-    return pdf_count
-
 def run_document_ingestion(folder_path, file_type):
     from rag.database.mongodb_handler import MongoDBHandler  # Lazy import
     from ingestion.document_ingestion import DocumentIngestion  # Lazy import
@@ -96,17 +89,43 @@ def run_document_ingestion(folder_path, file_type):
         # Initialize the ingestion handler
         ingestion_handler = DocumentIngestion(mongodb_handler, folder_path, file_type)
         ingestion_handler.ingest_from_folder()
+        #close() called automatically on mongodb_handler after exiting this context
 
     # Any remaining cleanup or processing
     print("Document ingestion completed.")
 
+def run_embedding_generation():
+    from rag.database.mongodb_handler import MongoDBHandler  # Lazy import
+    from rag.database.milvus_handler import MilvusHandler  # Lazy import
+    from rag.embedding.embedding_handler import EmbeddingHandler  # Lazy import
+    logger = logging.getLogger(__name__)
+
+    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, \
+         MilvusHandler(host='localhost', port='19530') as milvus_handler:
+        
+        # Create mivlus collection
+        milvus_handler.create_collection("legal_acts", force=True)
+        
+        # Initialize the embedding generator
+        embedding_generator = EmbeddingHandler(
+             "sentence-transformers/all-mpnet-base-v2", 
+             mongodb_handler, 
+             milvus_handler
+             )
+        # Generate and store embeddings for all documents in the legal_acts collection of MongoDB
+        embedding_generator.process_and_store_embeddings("legal_acts")
+
 
 def main():
+    setup_logging(log_level='INFO')
+    logger = logging.getLogger(__name__)
+
     parser = argparse.ArgumentParser(
         description='RAG System: A system for Retrieval-Augmented Generation.',
         epilog='Examples:\n'
                '  python main.py ingest case_files /path/to/folder\n'
                '  python main.py ingest legal_acts /path/to/folder\n'
+               '  python main.py generate_embeddings\n'
                '\n'
                'For more information, use the help command for specific commands.',
         formatter_class=argparse.RawTextHelpFormatter
@@ -118,18 +137,31 @@ def main():
     ingest_parser.add_argument('file_type', type=str, choices=['case_files', 'legal_acts'], help='Type of files to ingest (case_files or legal_acts)')
     ingest_parser.add_argument('folder_path', type=str, help='Path to the folder containing documents to ingest')
 
+    # Subparser for the generate_embeddings command
+    generate_embeddings_parser = subparsers.add_parser('generate_embeddings', help='Generate embeddings for the ingested documents')
+
+    # Common argument for log level
+    parser.add_argument('--log_level', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        help='Set the logging level')
     args = parser.parse_args()
 
-    if args.command == 'ingest':
-        if not args.folder_path or not args.file_type:
-            ingest_parser.error("The 'folder_path' and 'file_type' arguments are required for the ingest command")
-        run_document_ingestion(args.folder_path, args.file_type)
-    elif args.command is None:
-        # No command provided
-        parser.print_help()
-    else:
-        #run_rag_pipeline()
-        pass
+    try:
+        if args.command == 'ingest':
+            if not args.folder_path or not args.file_type:
+                ingest_parser.error("The 'folder_path' and 'file_type' arguments are required for the ingest command")
+            run_document_ingestion(args.folder_path, args.file_type)
+        elif args.command == 'generate_embeddings':
+            run_embedding_generation()
+        elif args.command is None:
+            # No command provided
+            parser.print_help()
+        # else:
+        #     #run_rag_pipeline()
+        #     pass
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error("An error occurred: %s", str(e), exc_info=True)
+        print(f"An error occurred: {e}. Please check the log file for more details.")
 
 if __name__ == "__main__":
     main()

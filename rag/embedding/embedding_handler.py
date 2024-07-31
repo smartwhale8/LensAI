@@ -1,5 +1,6 @@
 from sentence_transformers import SentenceTransformer
 import torch
+import torch.nn.functional as F
 import numpy as np
 from pymilvus import Collection, MilvusException
 import logging
@@ -20,7 +21,7 @@ class EmbeddingHandler:
     def generate_embeddings(self, texts):
         # Generate embeddings
         with torch.no_grad():
-            embeddings = self.model.encode(texts, convert_to_tensor=True) # Convert to tensor
+            embeddings = self.model.encode(texts, normalize_embeddings=True, convert_to_tensor=True) # Convert to tensor
             embeddings = embeddings.cpu().numpy() # Ensure embeddings are moved to CPU before converting to numpy array
 
         return embeddings
@@ -63,31 +64,36 @@ class EmbeddingHandler:
             return
         
         total_docs = self.mongodb_handler.count_documents(collection_name)
-        print(f"Total documents in {collection_name} to process: {total_docs}")
+        self.logger.info(f"Total documents in {collection_name} to process: {total_docs}")
 
         processed_docs = 0
         for i in range(0, total_docs, batch_size):
             # We cant really use projection here, as we want to be collection agnostic at this stage!
-            docs = self.mongodb_handler.find(collection_name, {}, limit=batch_size, skip=i)
+            if collection_name == "legal_acts":
+                projection = {"act_id": 1, "text_content": 1, "act_year": 1, "short_title": 1, "long_title": 1}
+            elif collection_name == "case_files":
+                projection = {"case_id": 1, "case_description": 1, "case_date": 1, "case_type": 1}
+
+            docs = self.mongodb_handler.find_documents(collection_name, filter_dict=None, projection=projection, skipi=i, limit=batch_size)
             batch_data = self.process_batch(docs, collection_name)
             if batch_data:
                 try:
                     milvus_collection.insert(batch_data)
-                    processed_docs += len(batch_data)
+                    processed_docs += len(batch_data[0]) # The length of the first element in batch_data (act_id, in this case) is the number of documents processed
                     self.logger.info(f"Processed {processed_docs}/{total_docs} documents")
                 except MilvusException as e:
-                    self.logger.error(f"Failed to insert batch data into Milvus collection")
+                    self.logger.error(f"Failed to insert batch data into Milvus collection: {str(e)}")
                     return False
 
         milvus_collection.flush()
         # index params define how the vectors are organized and stored in the DB.
         index_params = {
-            "metric_type": "IP",
             "index_type": "IVF_FLAT",
+            "metric_type": "IP",
             "params": {"nlist": 1024}
         }
         milvus_collection.create_index("embedding", index_params)
-        self.logger.info(f"Finished processing all documents and storing embeddings in Milvus for {collection_name}")
+        self.logger.info(f"Finished processing all documents ({processed_docs}) and storing embeddings in Milvus for {collection_name}")
     
     def process_legal_acts_batch(self, acts: list) -> list:
         act_ids = []

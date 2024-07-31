@@ -91,13 +91,29 @@ class MongoDBHandler:
             self.logger.error(f"Bulk write error: {bwe}")
             return None
         
-    def find_documents(self, collection_name, filter_dict=None, projection=None, sort=None, limit=0):
+    def find_documents(self, collection_name, filter_dict=None, projection=None, limit=0, skipi=0):
         """
         Find documents in the collection that match the filter criteria.
         """
+        if filter_dict is None:
+            filter_dict = {}
+        if projection is None:
+            projection = {}
+
         collection = self.db[collection_name]
-        return list(collection.find(filter_dict, projection).sort(sort).limit(limit))
+        return list(collection.find(filter_dict, projection).skip(skipi).limit(limit))
     
+    def count_documents(self, collection_name, filter_dict=None):
+        """
+        Count documents in the collection that match the filter criteria.
+        """
+        # Ensure filter_dict is a dictionary, defaulting to an empty dictionary if None
+        if filter_dict is None:
+            filter_dict = {}
+
+        collection = self.db[collection_name]
+        return collection.count_documents(filter_dict)
+
     def delete_documents(self, collection_name, filter_dict):
         """
         Delete documents from the collection that match the filter criteria.

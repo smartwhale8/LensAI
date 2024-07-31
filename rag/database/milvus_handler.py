@@ -1,6 +1,6 @@
-from pymilvus import DataType, CollectionSchema, FieldSchema, Collection, connections, utility
+from pymilvus import DataType, CollectionSchema, FieldSchema, Collection, connections, utility, MilvusClient
 from pymilvus.exceptions import SchemaNotReadyException
-
+import logging
 
 class MilvusHandler:
     def __init__(self, host="localhsot", port="19530"):
@@ -10,20 +10,36 @@ class MilvusHandler:
         self.default_field = "embedding"  # Default field for vector embeddings
         self.schemas = self._initialize_schemas()
         self.index_params = {
-            "index_type": "IVF_FLAT",
-            "metric_type": "L2",
-            "params": {"nlist": 1024}
+            "index_type": "IVF_FLAT",  #The IVF_FLAT index type is suitable for scenarios that seek a balance between accuracy and query speed.
+            "metric_type": "IP",   # The IP metric (Inner Product) is more suitable natural language processing (NLP) applications; while L2 more for Computer Vision (CV) applications.
+            "params": {"nlist": 1024} # Number of clusters to create
         }
         self.search_params = {
             "metric_type": "L2",  # Ensure this matches the index metric_type
             "params": {"nprobe": 10} # Number of clusters to search
         }
-        self.connect()
+        self.logger = logging.getLogger(__name__)
 
+        #self.connect()
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close_connection()
+    
     def connect(self):
         # Connect to Milvus server
         connections.connect(alias="default", host=self.host, port=self.port)
-        print(f"Connected to Milvus at {self.host}:{self.port}")
+        self.client = MilvusClient(uri=f"http://{self.host}:{self.port}")
+        self.logger.info(f"Connected to Milvus at {self.host}:{self.port}")
+
+    def close_connection(self):
+        # Close connection to Milvus server
+        if self.client:
+            self.client.close()
+            self.logger.info("Connection to Milvus closed.")
 
     def _initialize_schemas(self):
         # Define schemas for all collections
@@ -40,6 +56,7 @@ class MilvusHandler:
             ],
             "case_files": [
                 FieldSchema(name="case_id", dtype=DataType.INT64, max_length=100, is_primary=True, description="Unique identifier for the case"),
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=768, description="Text content embeddings"),
                 FieldSchema(name="case_year", dtype=DataType.INT64),
                 FieldSchema(name="case_title", dtype=DataType.VARCHAR, max_length=500),
                 FieldSchema(name="plaintiff", dtype=DataType.VARCHAR, max_length=300),
@@ -50,37 +67,37 @@ class MilvusHandler:
     
     # function to create a collection with a given name
     def create_collection(self, collection_name, force=False):
+        if self.client is None:
+            raise RuntimeError("Milvus client is not connected. Please connect first.")
+        
         # Drop the collection if it already exists and force=True
         if force and utility.has_collection(collection_name):
             self.client.drop_collection(collection_name)
-            print(f"Collection '{collection_name}' dropped.")
+            self.logger.info(f"Collection '{collection_name}' dropped.")
         else:
-            print(f"Collection '{collection_name}' does not exist, cannot drop")
+            self.logger.warn(f"Collection '{collection_name}' does not exist, cannot drop")
 
         #Create collection if it does not exist
         if not utility.has_collection(collection_name):
-            collection_schema = self.schemas.get(collection_name)
-            if collection_schema is None:
-                raise ValueError(f"Schema for collection '{collection_name}' not defined.")
-            # Create collection with the given schema
-            self.client.create_collection(
-                collection_name=collection_name, 
-                schema=collection_schema,
-                dimension=768,
-                vector_field_name="embedding"
-            )
-            # Create index after creating collection
-            self.create_index(collection_name)
-            print(f"Collection '{collection_name}' created with schema: {collection_schema}")
+            if collection_name in self.schemas:
+                # Create schema for the collection
+                schema = CollectionSchema(fields=self.schemas[collection_name], description=f"Schema for {collection_name}")
+                schema.verify()
+                # Create collection with the given schema
+                self.client.create_collection(collection_name=collection_name, schema=schema)
+                # Create index after creating collection
+                self.create_index(collection_name=collection_name)
+                self.logger.info(f"Collection '{collection_name}' created with schema: {schema}")
+            else:
+                self.logger.error(f"Schema for collection '{collection_name}' not found.")
         else:
-            print(f"Collection '{collection_name}' already exists, skipping creation.")
-            return
+            self.logger.error(f"Collection '{collection_name}' already exists, skipping creation.")
 
     def get_collection(self, collection_name):
         try:
             return Collection(collection_name, using="default")
         except SchemaNotReadyException as e:
-            print(f"Collection '{collection_name}' does not exist or schema is not ready.")
+            self.logger.error(f"Collection '{collection_name}' does not exist or schema is not ready.")
             return None
 
     def create_index(self, collection_name):
@@ -91,7 +108,7 @@ class MilvusHandler:
     def insert(self, vectors, collection_name):
         # Ensure collection exists
         if not self.client.has_collection(collection_name):
-            print(f"Collection '{collection_name}' does not exist. Please create it first.")
+            self.logger.error(f"Collection '{collection_name}' does not exist. Please create it first.")
             return
         # Get the collection
         collection = Collection(collection_name, using="default")
@@ -105,13 +122,13 @@ class MilvusHandler:
         if utility.has_collection(collection_name, using="default"):
             return Collection(collection_name, using="default").describe()
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
             return None
   
     def search(self, collection_name, vectors, top_k, field_name=None, search_params=None, output_fields=None):
         # Ensure the collection exists
         if not utility.has_collection(collection_name, using="default"):
-            print(f"Collection '{collection_name}' does not exist. Please create it first.")
+            self.logger.error(f"Collection '{collection_name}' does not exist. Please create it first.")
             return
         # Get the collection
         collection = Collection(collection_name, using="default")
@@ -130,16 +147,16 @@ class MilvusHandler:
         if utility.has_collection(collection_name, using="default"):
             collection = Collection(collection_name, using="default")
             collection.drop()
-            print(f"Collection '{collection_name}' dropped.")
+            self.logger.info(f"Collection '{collection_name}' dropped.")
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
 
     def count(self, collection_name):
         if utility.has_collection(collection_name, using="default"):
             collection = Collection(collection_name, using="default")
             return collection.num_entities
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
             return None
         
     def list_collections(self):
@@ -151,30 +168,30 @@ class MilvusHandler:
             collection = Collection(name=collection_name, using="default")
             if collection.has_index():
                 collection.drop_index()
-                print(f"Index for collection '{collection_name}' has been dropped.")
+                self.logger.info(f"Index for collection '{collection_name}' has been dropped.")
             else:
-                print(f"Collection '{collection_name}' does not have an index.")
+                self.logger.error(f"Collection '{collection_name}' does not have an index.")
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
 
     def update_collection_schema(self, collection_name, new_schema):
         if utility.has_collection(collection_name, using="default"):
             collection = Collection(name=collection_name, using="default")
             collection.drop()
             self.client.create_collection(collection_name, schema=new_schema)
-            print(f"Collection '{collection_name}' schema has been updated.")
+            self.logger.info(f"Collection '{collection_name}' schema has been updated.")
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
 
     def check_index_status(self, collection_name):
         if utility.has_collection(collection_name, using="default"):
             collection = Collection(name=collection_name, using="default")
             if collection.has_index():
-                print(f"Collection '{collection_name}' has an index.")
+                self.logger.info(f"Collection '{collection_name}' has an index.")
             else:
-                print(f"Collection '{collection_name}' does not have an index.")
+                self.logger.error(f"Collection '{collection_name}' does not have an index.")
         else:
-            print(f"Collection '{collection_name}' does not exist.")
+            self.logger.error(f"Collection '{collection_name}' does not exist.")
 
     def define_default_schema(self, collection_name):
         # Define a default schema for testing purposes

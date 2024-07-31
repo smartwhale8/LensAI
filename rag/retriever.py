@@ -63,8 +63,8 @@ class Retriever:
         # Embed the query
         query_embedding = self.embedding.generate_embeddings(query)
         
-        # Search params determine how the search is performed; influence the accuracy and efficiency of the search
-        search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
+        # Search params determine how the search is performed; influence the accuracy and efficiency of the search; Search metric type must match the metric used during indexing, 'IP' for our case
+        search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
 
         # Search similar documents in Milvus
         results = self.milvus.search(
