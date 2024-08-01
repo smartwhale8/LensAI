@@ -2,7 +2,7 @@ from sentence_transformers import SentenceTransformer
 import torch
 import torch.nn.functional as F
 import numpy as np
-from pymilvus import Collection, MilvusException
+from pymilvus import MilvusException
 import logging
 
 class EmbeddingHandler:
@@ -87,6 +87,7 @@ class EmbeddingHandler:
 
         milvus_collection.flush()
         # index params define how the vectors are organized and stored in the DB.
+        #TODO: [CodeReview] Move the index config to a config file, it's too critical to be hardcoded and hidden here
         index_params = {
             "index_type": "IVF_FLAT",
             "metric_type": "IP",

@@ -90,7 +90,19 @@ class MongoDBHandler:
         except Exception as bwe:
             self.logger.error(f"Bulk write error: {bwe}")
             return None
-        
+    
+    def find_one(self, collection_name, filter_dict=None, projection=None):
+        """
+        Find a single document in the collection that matches the filter criteria.
+        """
+        if filter_dict is None:
+            filter_dict = {}
+        if projection is None:
+            projection = {}
+
+        collection = self.db[collection_name]
+        return collection.find_one(filter_dict, projection)
+
     def find_documents(self, collection_name, filter_dict=None, projection=None, limit=0, skipi=0):
         """
         Find documents in the collection that match the filter criteria.

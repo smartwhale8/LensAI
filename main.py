@@ -4,6 +4,7 @@ import argparse
 import os
 from tqdm import tqdm
 import json
+from typing import List, Tuple
 from logging_config import setup_logging
 import logging
 
@@ -60,21 +61,49 @@ def run_rag_pipeline():
     # Load configuration
     #config = load_config()
 
-    # Initialize Handlers
-    mongodb = MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai")
-    milvus = MilvusHandler(host="localhost", port="19530") 
-    embedding = EmbeddingHandler("sentence-transformers/all-mpnet-base-v2", mongodb, milvus)
-    
-    #Initialize RAG components
-    retriever = Retriever(
-        milvus, 
-        mongodb, 
-        embedding, 
-        CollectionConfigFactory.get_config("legal_acts")
-    )
-    generator = Generator()
 
-    # Run the retreival and generation loop
+    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, MilvusHandler(host='localhost', port='19530') as milvus_handler:
+
+        #Initialize RAG components        
+        embedding_handler = EmbeddingHandler("sentence-transformers/all-mpnet-base-v2", mongodb_handler, milvus_handler)
+
+
+        retriever = Retriever(
+            milvus_handler, 
+            mongodb_handler, 
+            embedding_handler, 
+            CollectionConfigFactory.get_config("legal_acts")
+        )
+        generator = Generator()
+
+        # Run the retreival and generation loop
+
+        chat_history: List[Tuple[str, str]] = []
+        print("Welcome to the Legal Research Assistant 'LegalGenie'!\n Type 'exit', 'bye' or 'end' to finish the conversation.")
+        while True:
+            user_query = input("You: ").strip()
+            if user_query.lower() in ['exit', 'bye', 'end']:
+                print("Thank you for using the Legal Research Assistant. Goodbye!")
+                break
+
+            # Retrieve relevant documents (acts/case files) based on user query
+            retrieved_docs = retriever.retrieve(query_text=user_query)
+            print(f"Retrieved {len(retrieved_docs)} documents.")
+
+            if not retrieved_docs:
+                print("LegalGenie: I'm sorry, I couldn't find any relevant documents based on your query.")
+                continue
+            else:
+                context = retrieved_docs[0]["relevant_excerpt"]  # Use the most similar document as context
+
+            # Generate response
+            #context = "\n".join([f"{msg[0]}: {msg[1]}" for msg in chat_history[-3:]])  # Use last 3 exchanges as context ?
+            response = generator.generate(user_query, context)
+
+            chat_history.append(("User", user_query))
+            chat_history.append(("LegalGenie", response))
+            print(f"LegalGenie: {response}")
+
 
 def run_document_ingestion(folder_path, file_type):
     from rag.database.mongodb_handler import MongoDBHandler  # Lazy import
@@ -108,7 +137,7 @@ def run_embedding_generation():
         
         # Initialize the embedding generator
         embedding_generator = EmbeddingHandler(
-             "sentence-transformers/all-mpnet-base-v2", 
+             "sentence-transformers/all-mpnet-base-v2",
              mongodb_handler, 
              milvus_handler
              )
@@ -140,6 +169,8 @@ def main():
     # Subparser for the generate_embeddings command
     generate_embeddings_parser = subparsers.add_parser('generate_embeddings', help='Generate embeddings for the ingested documents')
 
+    # Subparser for the process_query command
+    process_query_parser = subparsers.add_parser('process_query', help='Process user query through RAG Pipeline')
     # Common argument for log level
     parser.add_argument('--log_level', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help='Set the logging level')
@@ -152,6 +183,8 @@ def main():
             run_document_ingestion(args.folder_path, args.file_type)
         elif args.command == 'generate_embeddings':
             run_embedding_generation()
+        elif args.command == 'process_query':
+            run_rag_pipeline()
         elif args.command is None:
             # No command provided
             parser.print_help()

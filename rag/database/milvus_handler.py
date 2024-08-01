@@ -97,6 +97,10 @@ class MilvusHandler:
         else:
             self.logger.error(f"Collection '{collection_name}' already exists, skipping creation.")
 
+    def load_collection(self, collection_name):
+        self.client.load_collection(collection_name)
+        # TODO: Add error handling, check load state (client.get_load_state()); ref https://milvus.io/docs/manage-collections.md#Load--Release-Collection
+
     def get_collection(self, collection_name):
         try:
             return Collection(collection_name, using="default")
@@ -129,7 +133,7 @@ class MilvusHandler:
             self.logger.error(f"Collection '{collection_name}' does not exist.")
             return None
   
-    def search(self, collection_name, vectors, top_k, field_name=None, search_params=None, output_fields=None):
+    def search(self, collection_name, query_vectors, top_k, field_name=None, search_params=None, output_fields=None):
         # Ensure the collection exists
         if not utility.has_collection(collection_name, using="default"):
             self.logger.error(f"Collection '{collection_name}' does not exist. Please create it first.")
@@ -144,7 +148,16 @@ class MilvusHandler:
         search_params = search_params if search_params else self.search_params
 
         # Perform the search
-        results = collection.search(vectors, field_name, search_params, top_k, output_fields=output_fields)
+        #results = collection.search(query_vectors, field_name, search_params, top_k, output_fields=output_fields)
+        results = self.client.search(
+            collection_name=collection_name, 
+            data=query_vectors, 
+            anns_field=field_name, 
+            params=search_params, 
+            limit=top_k, 
+            output_fields=output_fields
+        )
+        
         return results
 
     def delete(self, collection_name):

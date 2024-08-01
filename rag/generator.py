@@ -1,6 +1,8 @@
 from typing import List, Dict
 import torch
+from transformers import AutoTokenizer
 from ctransformers import AutoModelForCausalLM
+import logging
 
 class Generator:
     def __init__(self, max_length: int = 512):
@@ -13,9 +15,14 @@ class Generator:
                 gpu_layers=50
             )
         self.max_length = max_length
-        self.chat_history = List[Dict[str, str]] = []
+        self.chat_history: List[Dict[str, str]] = []  # a list of dictionaries where both the keys and values are strings (role:message)
+
+    # Append a message to the chat history
+    def add_msg(self, role: str, message: str):
+        self.chat_history.append({"role": role, "content": message})
 
     def generate(self, query: str, context: str) -> str:
+
         # Construct a more structured prompt; longer prompts are seen to take a lot of time to generate
         system_message = "You are LegalGenie, an AI legal assistant. Provide only factual information directly from the given context. Do not add opinions, suggestions, or information not explicitly stated in the context."
         
@@ -51,10 +58,15 @@ class Generator:
         response = full_output[len(full_prompt):].strip()
         
         # Update chat history
-        self.chat_history.append({"role": "human", "content": query})
-        self.chat_history.append({"role": "ai", "content": response})
+        #self.chat_history.add_msg("human", query)
+        #self.chat_history.add_msg("ai", response)
         
         return response
 
+    # Get the chat history
+    def get_chat_history(self) -> List[Dict[str, str]]:
+        return self.chat_history
+
+    # Clear the chat history
     def clear_chat_history(self):
         self.chat_history.clear()
