@@ -3,7 +3,7 @@ from pymilvus.exceptions import SchemaNotReadyException
 import logging
 
 class MilvusHandler:
-    def __init__(self, host="localhsot", port="19530"):
+    def __init__(self, host="localhost", port="19530"):
         self.host = host
         self.port = port
         self.client = None
@@ -19,8 +19,7 @@ class MilvusHandler:
             "params": {"nprobe": 10} # Number of clusters to search
         }
         self.logger = logging.getLogger(__name__)
-
-        #self.connect()
+        self.connect()
 
     def __enter__(self):
         self.connect()
@@ -31,9 +30,14 @@ class MilvusHandler:
     
     def connect(self):
         # Connect to Milvus server
-        connections.connect(alias="default", host=self.host, port=self.port)
-        self.client = MilvusClient(uri=f"http://{self.host}:{self.port}")
-        self.logger.info(f"Connected to Milvus at {self.host}:{self.port}")
+        self.logger.info(f"Connecting to Milvus at {self.host}:{self.port}")
+        try:
+            connections.connect(alias="default", host=self.host, port=self.port)
+            self.client = MilvusClient(uri=f"http://{self.host}:{self.port}")
+            self.logger.info(f"Connected successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to connect to Milvus: {str(e)}")
+            self.client = None
 
     def close_connection(self):
         # Close connection to Milvus server

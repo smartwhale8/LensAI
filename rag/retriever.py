@@ -58,6 +58,8 @@ class Retriever:
         self.collection_config = collection_config
         self.top_k = top_k
         self.logger = logging.getLogger(__name__)
+        if self.milvus.client is None:
+            raise ConnectionError("Failed to connect to Milvus database")
         self.milvus.load_collection(collection_name=self.collection_config.name)
 
     def retrieve(self, query_text: str, top_k: int = 4, threshold: float = 0.7) -> List[Dict[str, str]]:
