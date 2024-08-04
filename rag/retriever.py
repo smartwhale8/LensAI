@@ -4,6 +4,7 @@ from rag.database.milvus_handler import MilvusHandler
 from rag.database.mongodb_handler import MongoDBHandler
 from rag.embedding.embedding_handler import EmbeddingHandler
 from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer
 from nltk.tokenize import sent_tokenize
 import torch
 import logging
@@ -61,9 +62,11 @@ class Retriever:
         if self.milvus.client is None:
             raise ConnectionError("Failed to connect to Milvus database")
         self.milvus.load_collection(collection_name=self.collection_config.name)
+        self.query_text = None
 
     def retrieve(self, query_text: str, top_k: int = 4, threshold: float = 0.7) -> List[Dict[str, str]]:
         # Generate embedding for the query
+        self.query_text = query_text # maintain the query text for later use
         query_embeddings = self.embedding.generate_embeddings([query_text])
         # Ensure that embeddings were generated
         if query_embeddings is None or len(query_embeddings) == 0:
@@ -151,7 +154,15 @@ class Retriever:
     def chunk_sentences(self, sentences, chunk_size=3):
         return [' '.join(sentences[i:i+chunk_size]) for i in range(0, len(sentences), chunk_size)]
 
-    def _get_relevant_excerpt_using_milvus_embedding_with_chunking(self, full_text, query_embedding, doc_embedding, num_chunks=2, chunk_size=2):
+    def _get_relevant_excerpt_using_milvus_embedding_with_chunking(self, full_text, query_embedding, doc_embedding, num_chunks=2, chunk_size=2, max_tokens=512):
+        """
+        1. Use sentence tokenization to break full text into sentences.
+        2. Chunk these sentences into groups of a specified size (default: 3 sentences per chunk).
+        3. Generate embedding for each chunk.
+        4. Calculate cosine similarity between chunks and both the document embeddings and query embeddings.
+        5. Select the top most relevant chunks based on the combined similarity scores.
+        6. Join the top chunks to form the relevant excerpt.
+        """
         if doc_embedding is None:
             raise ValueError("doc_embedding is None. Please ensure it's properly retrieved from Milvus.")
         
@@ -180,15 +191,28 @@ class Retriever:
         # Combine both similarities (you can adjust the weights)
         combined_similarities = 0.5 * doc_similarities + 0.5 * query_similarities
         
-        # Get indices of top similar chunks
-        top_indices = combined_similarities.argsort()[-num_chunks:][::-1]
+        # Sort chunks by similarity
+        sorted_indices = combined_similarities.argsort()[::-1]
         
-        # Sort indices to maintain original order
-        top_indices = sorted(top_indices)
+        # Initialize tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+
+        # Count tokens in the query
+        query_tokens = len(tokenizer.tokenize(self.query_text))
+        relevant_chunks = []
+        total_tokens = query_tokens
+
+        # Select chunks while respecting token limit
+        for idx in sorted_indices:
+            chunk_tokens = len(tokenizer.tokenize(chunks[idx]))
+            if total_tokens + chunk_tokens > max_tokens:
+                break
+            relevant_chunks.append(chunks[idx])
+            total_tokens += chunk_tokens                
         
-        # Join the top chunks
-        relevant_excerpt = ' '.join([chunks[i] for i in top_indices])
-        
+        # Join the selected chunks
+        relevant_excerpt = ' '.join(relevant_chunks)
+
         return relevant_excerpt
 
 
