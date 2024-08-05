@@ -12,7 +12,8 @@ class LegalActSchema(BaseModel):
     enforcement_date: str # Date when the legal act was enforced
     short_title: str # Short title of the legal act
     long_title: str # Long title of the legal act
-    pdf_file_path: str # Path to the PDF file of the legal act
+    pdf_file_path: str # Path to the PDF file of the legal act 
+    pdf_url: Optional[str] = None # URL to the PDF file of the legal act (if web link is available)
     text_content: str # Text content of the legal act (extracted from the PDF)
     last_updated: str # Date when the legal act entry was last udpated
     tags: Optional[List[str]] = None

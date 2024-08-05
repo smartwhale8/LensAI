@@ -12,11 +12,11 @@
                 "collection_name": "legal_acts",
                 "index_params": {
                     "index_type": "IVF_FLAT",
-                    "metric_type": "L2",
-                    "params": {"nlist": 128}
+                    "metric_type": "IP",
+                    "params": {"nlist": 1024}
                 },
                 "search_params": {
-                    "metric_type": "L2",
+                    "metric_type": "IP",
                     "params": {"nprobe": 10}
                 }
             },
@@ -24,21 +24,24 @@
                 "collection_name": "case_files",
                 "index_params": {
                     "index_type": "IVF_FLAT",
-                    "metric_type": "L2",
+                    "metric_type": "IP",
                     "params": {"nlist": 128}
                 },
                 "search_params": {
-                    "metric_type": "L2",
+                    "metric_type": "IP",
                     "params": {"nprobe": 10}
                 }
             }
         }
     },
     "embedding": {
-        "model_name": "bert-base-uncased",
-        "device": "cuda"
+        "emb_model_name": "sentence-transformers/all-mpnet-base-v2"
     },
     "generator": {
-        "model_name": "gpt-3"
+        "gen_model_name": "TheBloke/Llama-2-7b-Chat-GGUF",
+        "gen_model_file": "llama-2-7b-chat.q4_K_M.gguf",
+        "gen_model_type": "llama",
+        "gen_tokenizer": "meta-llama/Llama-2-7b-chat-hf",
+        "gpu_layers": 50
     }
 }

@@ -57,16 +57,14 @@ def run_rag_pipeline():
     from rag.embedding.embedding_handler import EmbeddingHandler
     from rag.retriever import Retriever, CollectionConfig, CollectionConfigFactory
     from rag.generator import Generator
+    from rag.rag_response import RAGResponse
 
     # Load configuration
     #config = load_config()
 
-
-    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, MilvusHandler(host='localhost', port='19530') as milvus_handler:
-
+    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, MilvusHandler() as milvus_handler:
         #Initialize RAG components        
         embedding_handler = EmbeddingHandler("sentence-transformers/all-mpnet-base-v2", mongodb_handler, milvus_handler)
-
 
         retriever = Retriever(
             milvus_handler, 
@@ -100,6 +98,18 @@ def run_rag_pipeline():
             #context = "\n".join([f"{msg[0]}: {msg[1]}" for msg in chat_history[-3:]])  # Use last 3 exchanges as context ?
             response = generator.generate(user_query, context)
 
+            # Create the RAGResponse object
+            rag_response = RAGResponse(response, retrieved_docs)
+            # Use the RAGResponse methods as needed
+            print("==============================")
+            print(rag_response.get_formatted_response())
+            metadata = rag_response.get_metadata()
+            json_response = rag_response.get_json_response()
+            
+            print("metadata: ", metadata) # Metadata for the response
+            print("json_response: ", json_response) # JSON response
+            
+            print("==============================")
             chat_history.append(("User", user_query))
             chat_history.append(("LegalGenie", response))
             print(f"LegalGenie: {response}")
@@ -130,7 +140,7 @@ def run_embedding_generation():
     logger = logging.getLogger(__name__)
 
     with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, \
-         MilvusHandler(host='localhost', port='19530') as milvus_handler:
+         MilvusHandler() as milvus_handler:
         
         # Create mivlus collection
         milvus_handler.create_collection("legal_acts", force=True)

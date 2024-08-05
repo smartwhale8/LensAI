@@ -73,7 +73,7 @@ class DocumentIngestion:
                 metadata[key] = value
         return metadata
 
-    def insert_document(self, collection_name: str, metadata: Dict[str, Any], pdf_filename: str, text_content: str):
+    def insert_document(self, collection_name: str, metadata: Dict[str, Any], url:str, pdf_filename: str, text_content: str):
         if collection_name == "legal_acts":
             act_data = {
                 "act_id": metadata.get("act_id", ""),
@@ -86,6 +86,7 @@ class DocumentIngestion:
                 "department": metadata.get("department", ""),
                 "enforcement_date": metadata.get("enforcement_date", None),
                 "pdf_file_path": pdf_filename,
+                "pdf_url": url, # Add URL if available
                 "text_content": text_content,
                 "last_updated": datetime.now(timezone.utc)
             }
@@ -128,6 +129,7 @@ class DocumentIngestion:
 
         for metadata in tqdm(metadata_list):
             pdf_filename = metadata['pdf_filename']
+            pdf_url = metadata['url']
             pdf_path = os.path.join(acts_folder, pdf_filename)
             text_content = self.extract_text_from_pdf(pdf_path)
 
@@ -138,7 +140,7 @@ class DocumentIngestion:
                 print(f"Skipping act with no act_id: {metadata.get('short_title', 'Unknown Title')}")
                 continue
 
-            result = self.insert_document("legal_acts", metadata, pdf_filename, text_content)
+            result = self.insert_document("legal_acts", metadata, pdf_url, pdf_filename, text_content)
             if result:
                 print(f"Inserted/Updated act {pdf_filename} in MongoDB")
             else:

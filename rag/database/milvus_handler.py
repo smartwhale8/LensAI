@@ -1,24 +1,16 @@
 from pymilvus import DataType, CollectionSchema, FieldSchema, Collection, connections, utility, MilvusClient
 from pymilvus.exceptions import SchemaNotReadyException
+from config.config import ConfigLoader
 import logging
+from typing import Dict, Any
 
 class MilvusHandler:
-    def __init__(self, host="localhost", port="19530"):
-        self.host = host
-        self.port = port
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.config = ConfigLoader().get_milvus_config()
         self.client = None
         self.default_field = "embedding"  # Default field for vector embeddings
         self.schemas = self._initialize_schemas()
-        self.index_params = {
-            "index_type": "IVF_FLAT",  #The IVF_FLAT index type is suitable for scenarios that seek a balance between accuracy and query speed.
-            "metric_type": "IP",   # The IP metric (Inner Product) is more suitable natural language processing (NLP) applications; while L2 more for Computer Vision (CV) applications.
-            "params": {"nlist": 1024} # Number of clusters to create
-        }
-        self.search_params = {
-            "metric_type": "L2",  # Ensure this matches the index metric_type
-            "params": {"nprobe": 10} # Number of clusters to search
-        }
-        self.logger = logging.getLogger(__name__)
         self.connect()
 
     def __enter__(self):
@@ -28,12 +20,32 @@ class MilvusHandler:
     def __exit__(self, exc_type, exc_value, traceback):
         self.close_connection()
     
+    def get_collection_config(self, collection_name: str):
+        return self.config.collections.get(collection_name)
+
+    def get_index_params(self, collection_name:str):
+        collection_config = self.get_collection_config(collection_name)
+        if collection_config:
+            return collection_config.index_params
+        raise ValueError(f"Configuration for collection '{collection_name}' not found")
+        
+    # will be used in case search_params are not provided by user of search function
+    def get_default_search_params(self, collection_name:str):
+        collection_config = self.get_collection_config(collection_name)
+        if collection_config:
+            return collection_config.search_params
+        raise ValueError(f"Configuration for collection '{collection_name}' not found")
+
     def connect(self):
         # Connect to Milvus server
-        self.logger.info(f"Connecting to Milvus at {self.host}:{self.port}")
+        self.logger.info(f"Connecting to Milvus at {self.config.host}:{self.config.port}")
         try:
-            connections.connect(alias="default", host=self.host, port=self.port)
-            self.client = MilvusClient(uri=f"http://{self.host}:{self.port}")
+            connections.connect(
+                alias="default", 
+                host=self.config.host, 
+                port=self.config.port
+            )
+            self.client = MilvusClient(uri=f"http://{self.config.host}:{self.config.port}")
             self.logger.info(f"Connected successfully")
         except Exception as e:
             self.logger.error(f"Failed to connect to Milvus: {str(e)}")
@@ -101,6 +113,32 @@ class MilvusHandler:
         else:
             self.logger.error(f"Collection '{collection_name}' already exists, skipping creation.")
 
+    def validate_search_params(self, collection_name: str, search_params: Dict[str, Any]) -> Dict[str, Any]:
+        index_params = self.get_index_params(collection_name)
+        default_search_params = self.get_default_search_params(collection_name)
+
+        # Ensure metric_type matches index_params
+        if 'metric_type' in search_params and search_params['metric_type'] != index_params['metric_type']:
+            self.logger.error(f"Search metric_type must match index metric_type: {index_params['metric_type']}. Fix to proceed.")
+            raise ValueError(f"Search metric_type must match index metric_type: {index_params['metric_type']}")
+        
+        # Set default metric_type if not provided
+        if 'metric_type' not in search_params:
+            search_params['metric_type'] = index_params['metric_type']
+        
+        # Validate and set default params based on index_type
+        if index_params['index_type'] == 'IVF_FLAT':
+            if 'nprobe' not in search_params:
+                search_params['nprobe'] = default_search_params['params'].get('nprobe', 10)
+            else:
+                # ensure nprobe is within valid range (1, nlist)
+                search_params['nprobe'] = max(1, min(search_params['nprobe'], index_params['params']['nlist']))
+        elif index_params['index_type'] == 'HNSW':
+            if 'ef' not in search_params:
+                search_params['ef'] = default_search_params['params'].get('ef', 10)
+        
+        return search_params
+
     def load_collection(self, collection_name):
         self.client.load_collection(collection_name)
         # TODO: Add error handling, check load state (client.get_load_state()); ref https://milvus.io/docs/manage-collections.md#Load--Release-Collection
@@ -115,7 +153,7 @@ class MilvusHandler:
     def create_index(self, collection_name):
         collection = Collection(name=collection_name, using="default")
         if not collection.has_index():
-            collection.create_index(field_name="embedding", index_params=self.index_params)
+            collection.create_index(field_name="embedding", index_params=self.get_index_params(collection_name))
 
     def insert(self, vectors, collection_name):
         # Ensure collection exists
@@ -142,14 +180,19 @@ class MilvusHandler:
         if not utility.has_collection(collection_name, using="default"):
             self.logger.error(f"Collection '{collection_name}' does not exist. Please create it first.")
             return
+        
         # Get the collection
         collection = Collection(collection_name, using="default")
+        collection.load()
 
         # Use provided field_name if available, else use default
         field_name = field_name if field_name else self.default_field
 
         # Use provided search_params if available, else use default
-        search_params = search_params if search_params else self.search_params
+        if search_params is None:
+            search_params = self.get_default_search_params(collection_name)
+        else:
+            search_params = self.validate_search_params(collection_name, search_params)
 
         # Perform the search
         #results = collection.search(query_vectors, field_name, search_params, top_k, output_fields=output_fields)
