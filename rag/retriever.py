@@ -9,6 +9,7 @@ from nltk.tokenize import sent_tokenize
 import torch
 import logging
 
+#TODO: move it to config.py/config.json
 class CollectionConfig:
     def __init__(self, name: str, id_field: str, text_field: str, meta_fields: List[str], output_fields: List[str], chunk_size: int = 200, chunk_overlap: int = 50, vector_field: str = "embedding"):
         self.name = name
@@ -79,20 +80,13 @@ class Retriever:
         if query_embedding is None or query_embedding.size == 0:
             raise ValueError("Query embedding is empty")
         
-        # Search params determine how the search is performed; influence the accuracy and efficiency of the search; Search metric type must match the metric used during indexing, 'IP' for our case
-        #TODO #[CodeReview]: Move the search config to a config file, it's too critical to be hardcoded and hidden here
-        search_params = {
-            "metric_type": "IP", 
-            "params": {"nprobe": 10}
-        }
-
         # Search similar documents in Milvus
         results = self.milvus.search(
             collection_name=self.collection_config.name,
             query_vectors=[query_embedding],
             top_k=self.top_k, # Fetch more results for filtering, maybe top_k * 2?
             field_name=self.collection_config.vector_field,
-            search_params=search_params,
+            search_params=self.milvus.get_default_search_params(collection_name=self.collection_config.name),
             output_fields=[self.collection_config.id_field] + self.collection_config.output_fields + [self.collection_config.vector_field]
         )
 

@@ -1,17 +1,18 @@
 from sentence_transformers import SentenceTransformer
-import torch
+from config.config import ConfigLoader
+from pymilvus import MilvusException
 import torch.nn.functional as F
 import numpy as np
-from pymilvus import MilvusException
 import logging
+import torch
 
 class EmbeddingHandler:
-    def __init__(self, model_name: str, mongodb_handler, mivus_handler):
-        self.model = SentenceTransformer(model_name)
+    def __init__(self, mongodb_handler, mivus_handler):
+        self.logger = logging.getLogger(__name__)
+        self.config = ConfigLoader().get_embedding_config()
+        self.model = SentenceTransformer(self.config.emb_model_name)
         self.mongodb_handler = mongodb_handler
         self.milvus_handler = mivus_handler
-        self.logger = logging.getLogger(__name__)
-
         #Check for GPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)

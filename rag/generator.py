@@ -1,18 +1,21 @@
-from typing import List, Dict
-import torch
-from transformers import AutoTokenizer
 from ctransformers import AutoModelForCausalLM
+from transformers import AutoTokenizer
+from config.config import ConfigLoader
+from typing import List, Dict
 import logging
+import torch
 
 class Generator:
     def __init__(self, max_length: int = 512):
-        self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        self.logger = logging.getLogger(__name__)
+        self.config = ConfigLoader().get_generator_config()
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.gen_tokenizer)
         # Set gpu_layers to the number of layers to offload to GPU. Set to 0 if no GPU acceleration is available on your system.
         self.model = AutoModelForCausalLM.from_pretrained(
-                "TheBloke/Llama-2-7b-Chat-GGUF", 
-                model_file="llama-2-7b-chat.q4_K_M.gguf", 
-                model_type="llama", 
-                gpu_layers=50
+                self.config.gen_model_name,
+                model_file=self.config.gen_model_file,
+                model_type=self.config.gen_model_type,
+                gpu_layers=self.config.gpu_layers
             )
         self.max_length = max_length
         self.chat_history: List[Dict[str, str]] = []  # a list of dictionaries where both the keys and values are strings (role:message)

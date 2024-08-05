@@ -64,7 +64,7 @@ def run_rag_pipeline():
 
     with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, MilvusHandler() as milvus_handler:
         #Initialize RAG components        
-        embedding_handler = EmbeddingHandler("sentence-transformers/all-mpnet-base-v2", mongodb_handler, milvus_handler)
+        embedding_handler = EmbeddingHandler(mongodb_handler, milvus_handler)
 
         retriever = Retriever(
             milvus_handler, 

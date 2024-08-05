@@ -25,10 +25,13 @@ class MilvusConfig(BaseModel):
 
 class EmbeddingConfig(BaseModel):
     emb_model_name: str
-    device: str
 
 class GeneratorConfig(BaseModel):
     gen_model_name: str
+    gen_model_file: str
+    gen_model_type: str
+    gen_tokenizer: str
+    gpu_layers: int
 
 class Config(BaseModel):
     mongodb: MongoDBConfig
