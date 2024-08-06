@@ -1,5 +1,6 @@
 from sentence_transformers import SentenceTransformer
 from config.config import ConfigLoader
+from embedding.rag_chunker import RAGChunker
 from pymilvus import MilvusException
 from utils.logger.logging_config import logger
 import torch.nn.functional as F
@@ -17,7 +18,13 @@ class EmbeddingHandler:
         #Check for GPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
-
+        # Initialize the RAGChunker
+        self.chunker = RAGChunker(
+            emb_model_name=self.config.emb_model_name,
+            gen_model_name=ConfigLoader().get_generator_config().gen_model_name,
+            chunk_size=3500, # TODOD: [CodeReview] Move this to config file
+            overlap=50
+        )
         # get handle to mongodb collections, eg acts_collection, case_files_collection
 
     def generate_embeddings(self, texts):
@@ -29,7 +36,12 @@ class EmbeddingHandler:
         return embeddings
     
     def prepare_text_for_embedding(self, doc, collection_name):
-        """Prepare text based on the collection name"""
+        """
+        Prepare text based on the collection name
+        This method combines various fields of a document into a single text string. TODO: check if we need to change/improve this strategy
+        This string is then passed to the embedding model to generate embeddings.
+        """
+
         if collection_name == "legal_acts":
             text_parts = [
                 f"ID: {doc.get('act_id', 'N/A')}",
@@ -106,15 +118,17 @@ class EmbeddingHandler:
         long_titles = []
 
         for act in acts:
-            act_ids.append(act["act_id"])
-            texts.append(self.prepare_text_for_embedding(act, "legal_acts"))
-            act_years.append(str(act.get("act_year", "")))
-            short_titles.append(act.get("short_title", ""))
-            long_titles.append(act.get("long_title", ""))
+            original_text = self.prepare_text_for_embedding(act, "legal_acts")
+            chunks = self.chunker.chunk_document({"text": original_text}, method='tokens')
+            for chunk in chunks:
+                act_ids.append(f"{act['act_id']}_{chunk['chunk_id']}") # f"{act_id}_{chunk_id}" is the unique identifier for each chunk
+                texts.append(chunk["text"])
+                act_years.append(str(act.get("act_year", "")))
+                short_titles.append(act.get("short_title", ""))
+                long_titles.append(act.get("long_title", ""))
         
         embeddings = self.generate_embeddings(texts)
-        return [act_ids, embeddings.tolist(), act_years, short_titles, long_titles]
-    
+        return [act_ids, embeddings.tolist(), act_years, short_titles, long_titles]    
 
     def process_case_files_batch(self, cases: list) -> list:
         case_ids = []
@@ -123,10 +137,14 @@ class EmbeddingHandler:
         case_types = []
 
         for case in cases:
-            case_ids.append(case["act_id"])
-            texts.append(self.prepare_text_for_embedding(case, "case_files"))
-            case_dates.append(str(case.get("case_date", "")))
-            case_types.append(case.get("case_type", ""))
+            original_text = self.prepare_text_for_embedding(case, "case_files")
+            chunks = self.chunker.chunk_document({"text": original_text}, method='tokens')
+
+            for chunk in chunks:
+                case_ids.append(f"{case['case_id']}_{chunk['chunk_id']}")
+                texts.append(chunk["text"])
+                case_dates.append(str(case.get("case_date", "")))
+                case_types.append(case.get("case_type", ""))
         
-        embeddings = self.generate_embeddings(texts)
+        embeddings = self.generate_embeddings(texts)  # Generate embeddings for the text chunks
         return [case_ids, embeddings.tolist(), case_dates, case_types]

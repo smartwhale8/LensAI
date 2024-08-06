@@ -42,6 +42,7 @@
         "gen_model_file": "llama-2-7b-chat.q4_K_M.gguf",
         "gen_model_type": "llama",
         "gen_tokenizer": "meta-llama/Llama-2-7b-chat-hf",
-        "gpu_layers": 50
+        "gpu_layers": 50,
+        "context_window": 4096
     }
 }
