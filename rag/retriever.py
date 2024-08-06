@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 from nltk.tokenize import sent_tokenize
 import torch
-import logging
+from utils.logger.logging_config import logger
 
 #TODO: move it to config.py/config.json
 class CollectionConfig:
@@ -59,8 +59,9 @@ class Retriever:
         self.embedding = embedding_handler
         self.collection_config = collection_config
         self.top_k = top_k
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         if self.milvus.client is None:
+            logger.error("Failed to connect to Milvus database")
             raise ConnectionError("Failed to connect to Milvus database")
         self.milvus.load_collection(collection_name=self.collection_config.name)
         self.query_text = None
@@ -98,7 +99,7 @@ class Retriever:
                 try:
                     act_id = entity.get(self.collection_config.id_field)
                 except AttributeError:
-                    logging.error(f"Warning: Could not find {self.collection_config.id_field} in hit")
+                    logger.error(f"Warning: Could not find {self.collection_config.id_field} in hit")
                     continue
 
                 # Initialize the similar doc we are preparing
@@ -128,7 +129,7 @@ class Retriever:
                 if mongodb_doc:
                     full_text = mongodb_doc.get(self.collection_config.text_field, "")
                 else:
-                    logging.error(f"Warning: Document with id {act_id} not found in MongoDB")
+                    logger.error(f"Warning: Document with id {act_id} not found in MongoDB")
 
                 # Get relevant excerpt using Milvus embeddings
                 doc_embedding = np.array(entity.get(self.collection_config.vector_field, []))
@@ -137,7 +138,7 @@ class Retriever:
                     #self._get_relevant_excerpt_using_milvus_embedding(full_text, query_embedding, doc_embedding)
                     
                 except ValueError as e:
-                    logging.error(f"Error getting relevant excerpt for {act_id}: {e}")
+                    logger.error(f"Error getting relevant excerpt for {act_id}: {e}")
                     continue
 
                 similar_docs.append(similar_doc)
@@ -188,7 +189,7 @@ class Retriever:
         # Sort chunks by similarity
         sorted_indices = combined_similarities.argsort()[::-1]
         
-        # Initialize tokenizer
+        # Initialize tokenizer; TODO: move to config.json
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
         # Count tokens in the query

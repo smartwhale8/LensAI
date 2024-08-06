@@ -1,12 +1,12 @@
 from pymilvus import DataType, CollectionSchema, FieldSchema, Collection, connections, utility, MilvusClient
 from pymilvus.exceptions import SchemaNotReadyException
 from config.config import ConfigLoader
-import logging
+from utils.logger.logging_config import logger
 from typing import Dict, Any
 
 class MilvusHandler:
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.config = ConfigLoader().get_milvus_config()
         self.client = None
         self.default_field = "embedding"  # Default field for vector embeddings
@@ -88,6 +88,7 @@ class MilvusHandler:
     # function to create a collection with a given name
     def create_collection(self, collection_name, force=False):
         if self.client is None:
+            self.logger.critical("Milvus client is not connected. Please connect first.")
             raise RuntimeError("Milvus client is not connected. Please connect first.")
         
         # Drop the collection if it already exists and force=True
@@ -111,7 +112,7 @@ class MilvusHandler:
             else:
                 self.logger.error(f"Schema for collection '{collection_name}' not found.")
         else:
-            self.logger.error(f"Collection '{collection_name}' already exists, skipping creation.")
+            self.logger.warn(f"Collection '{collection_name}' already exists, skipping creation.")
 
     def validate_search_params(self, collection_name: str, search_params: Dict[str, Any]) -> Dict[str, Any]:
         index_params = self.get_index_params(collection_name)

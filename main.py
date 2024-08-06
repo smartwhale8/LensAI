@@ -6,7 +6,9 @@ from tqdm import tqdm
 import json
 from typing import List, Tuple
 from logging_config import setup_logging
-import logging
+#import logging
+from utils.logger.logging_config import logger
+from colorama import Fore, Style, Back, init
 
 class RAGOrchestrator:
     def __init__(self, mongodb, milvus, embedding, retriever, generator):
@@ -77,19 +79,19 @@ def run_rag_pipeline():
         # Run the retreival and generation loop
 
         chat_history: List[Tuple[str, str]] = []
-        print("Welcome to the Legal Research Assistant 'LegalGenie'!\n Type 'exit', 'bye' or 'end' to finish the conversation.")
+        print(Fore.BLUE + Back.WHITE + "Welcome to the Legal Research Assistant 'LegalGenie'!\n Type 'exit', 'bye' or 'end' to finish the conversation.")
         while True:
             user_query = input("You: ").strip()
             if user_query.lower() in ['exit', 'bye', 'end']:
-                print("Thank you for using the Legal Research Assistant. Goodbye!")
+                print(Fore.GREEN + "Thank you for using the Legal Research Assistant. Goodbye!")
                 break
 
             # Retrieve relevant documents (acts/case files) based on user query
             retrieved_docs = retriever.retrieve(query_text=user_query)
-            print(f"Retrieved {len(retrieved_docs)} documents.")
+            print(Fore.YELLOW + f"Retrieved {len(retrieved_docs)} documents.")
 
             if not retrieved_docs:
-                print("LegalGenie: I'm sorry, I couldn't find any relevant documents based on your query.")
+                print(Fore.RED + "LegalGenie: I'm sorry, I couldn't find any relevant documents based on your query.")
                 continue
             else:
                 context = retrieved_docs[0]["relevant_excerpt"]  # Use the most similar document as context
@@ -112,7 +114,7 @@ def run_rag_pipeline():
             print("==============================")
             chat_history.append(("User", user_query))
             chat_history.append(("LegalGenie", response))
-            print(f"LegalGenie: {response}")
+            print(Fore.WHITE + Back.GREEN + f"LegalGenie: {response}")
 
 
 def run_document_ingestion(folder_path, file_type):
@@ -121,7 +123,7 @@ def run_document_ingestion(folder_path, file_type):
 
     # Check if the folder_path exists and is a directory
     if not os.path.isdir(folder_path):
-        print(f"Error: The folder path '{folder_path}' is not valid.")
+        logger.error(f"Error: The folder path '{folder_path}' is not valid.")
         return
 
     with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler:
@@ -137,7 +139,6 @@ def run_embedding_generation():
     from rag.database.mongodb_handler import MongoDBHandler  # Lazy import
     from rag.database.milvus_handler import MilvusHandler  # Lazy import
     from rag.embedding.embedding_handler import EmbeddingHandler  # Lazy import
-    logger = logging.getLogger(__name__)
 
     with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, \
          MilvusHandler() as milvus_handler:
@@ -156,8 +157,6 @@ def run_embedding_generation():
 
 
 def main():
-    setup_logging(log_level='INFO')
-    logger = logging.getLogger(__name__)
 
     parser = argparse.ArgumentParser(
         description='RAG System: A system for Retrieval-Augmented Generation.',
@@ -202,9 +201,7 @@ def main():
         #     #run_rag_pipeline()
         #     pass
     except Exception as e:
-        logger = logging.getLogger(__name__)
         logger.error("An error occurred: %s", str(e), exc_info=True)
-        print(f"An error occurred: {e}. Please check the log file for more details.")
 
 if __name__ == "__main__":
     main()

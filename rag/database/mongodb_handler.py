@@ -1,6 +1,6 @@
 import pymongo
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
-import logging
+from utils.logger.logging_config import logger
 from typing import Dict, List, Optional
 
 
@@ -13,7 +13,7 @@ class MongoDBHandler:
         self.db_name = db_name
         self.client = None
         self.db = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger #logging.getLogger(__name__)
 
     def connect(self):
         try:
@@ -28,7 +28,7 @@ class MongoDBHandler:
     def close_connection(self):
         if self.client:
             self.client.close()
-            self.logger.info("Connection to MongoDB closed.")
+            self.logger.warn("Connection to MongoDB closed.")
 
     def create_collection(self, collection_name, **kwargs):
         if collection_name not in self.db.list_collection_names():
@@ -146,7 +146,7 @@ class MongoDBHandler:
         """                
         collection = self.db[collection_name]
         index_name = collection.create_index(keys, **kwargs)
-        print(f"Index '{index_name}' created on collection '{collection_name}'.")
+        self.logger.info(f"Index '{index_name}' created on collection '{collection_name}'.")
         return index_name
 
     def __enter__(self):
