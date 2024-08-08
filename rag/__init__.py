@@ -3,6 +3,7 @@
 from .database.mongodb_handler import MongoDBHandler
 from .database.milvus_handler import MilvusHandler
 from .embedding.embedding_handler import EmbeddingHandler
+from .embedding.rag_chunker import RAGChunker
 from .retriever import Retriever
 from .generator import Generator
 from .rag_response import RAGResponse
@@ -16,5 +17,6 @@ __all__ = [
     "Retriever",
     "Generator", 
     "RAGResponse",
+    "RAGChunker",
     "logger"
 ]

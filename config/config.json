@@ -35,7 +35,8 @@
         }
     },
     "embedding": {
-        "emb_model_name": "sentence-transformers/all-mpnet-base-v2"
+        "emb_model_name": "sentence-transformers/all-mpnet-base-v2",
+        "max_seq_length": 512
     },
     "generator": {
         "gen_model_name": "TheBloke/Llama-2-7b-Chat-GGUF",

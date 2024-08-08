@@ -5,7 +5,7 @@ import os
 from tqdm import tqdm
 import json
 from typing import List, Tuple
-from logging_config import setup_logging
+#from utils.logging_config import setup_logging
 #import logging
 from utils.logger.logging_config import logger
 from colorama import Fore, Style, Back, init
@@ -148,12 +148,12 @@ def run_embedding_generation():
         
         # Initialize the embedding generator
         embedding_generator = EmbeddingHandler(
-             "sentence-transformers/all-mpnet-base-v2",
              mongodb_handler, 
              milvus_handler
              )
         # Generate and store embeddings for all documents in the legal_acts collection of MongoDB
-        embedding_generator.process_and_store_embeddings("legal_acts")
+        logger.info("Generating embeddings for legal acts...")
+        embedding_generator.process_and_store_embeddings("legal_acts", batch_size=32)
 
 
 def main():

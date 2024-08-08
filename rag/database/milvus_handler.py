@@ -69,6 +69,7 @@ class MilvusHandler:
         return {
             "legal_acts": [
                 FieldSchema(name="act_id", dtype=DataType.INT64, max_length=100, is_primary=True, description="Unique identifier for the act"),
+                FieldSchema(name="chunk_id", dtype=DataType.INT64, description="Unique identifier for the chunk"),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=768, description="Text content embeddings"),
                 FieldSchema(name="act_year", dtype=DataType.VARCHAR, max_length=30, description="Year of the act"),
                 FieldSchema(name="short_title", dtype=DataType.VARCHAR, max_length=500),
@@ -85,6 +86,14 @@ class MilvusHandler:
             # Add more schemas here as needed
         }
     
+    # Return the schema for a given collection
+    def get_schema(self, collection_name):
+        if collection_name in self.schemas:
+            return self.schemas[collection_name]
+        else:
+            self.logger.error(f"Schema for collection '{collection_name}' not found.")
+            return None
+
     # function to create a collection with a given name
     def create_collection(self, collection_name, force=False):
         if self.client is None:

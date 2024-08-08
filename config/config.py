@@ -25,6 +25,7 @@ class MilvusConfig(BaseModel):
 
 class EmbeddingConfig(BaseModel):
     emb_model_name: str
+    max_seq_length: int
 
 class GeneratorConfig(BaseModel):
     gen_model_name: str
@@ -32,6 +33,7 @@ class GeneratorConfig(BaseModel):
     gen_model_type: str
     gen_tokenizer: str
     gpu_layers: int
+    context_window: int
 
 class Config(BaseModel):
     mongodb: MongoDBConfig

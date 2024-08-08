@@ -1,4 +1,5 @@
 # rag/embedding/__init__.py
 
 from .embedding_handler import EmbeddingHandler
-__all__ = ["EmbeddingHandler"]
+from .rag_chunker import RAGChunker
+__all__ = ["EmbeddingHandler", "RAGChunker"]

@@ -6,7 +6,7 @@ from rag.embedding.embedding_handler import EmbeddingHandler
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 from nltk.tokenize import sent_tokenize # ?? why this tokenizer was used!!!
-from embedding.rag_chunker import RAGChunker
+from rag.embedding.rag_chunker import RAGChunker
 from config.config import ConfigLoader
 
 
@@ -15,12 +15,13 @@ from utils.logger.logging_config import logger
 
 #TODO: move it to config.py/config.json
 class CollectionConfig:
-    def __init__(self, name: str, id_field: str, 
+    def __init__(self, name: str, id_field: str, chunk_id_field:str,
                  text_field: str, meta_fields: List[str], 
                  output_fields: List[str], chunk_size: int = 200, 
                  chunk_overlap: int = 50, vector_field: str = "embedding"):
         self.name = name
         self.id_field = id_field
+        self.chunk_id_field = chunk_id_field
         self.text_field = text_field
         self.meta_fields = meta_fields
         self.output_fields = output_fields + [vector_field]
@@ -35,6 +36,7 @@ class CollectionConfigFactory:
             return CollectionConfig(
                 name="legal_acts",
                 id_field="act_id",
+                chunk_id_field="chunk_id",
                 text_field="text_content", # Field containing the text content of the act in MongoDB
                 meta_fields=["short_title", "long_title", "act_year"],
                 output_fields=["short_title", "long_title", "act_year"],
@@ -59,7 +61,8 @@ class Retriever:
         mongodb_handler: MongoDBHandler,
         embedding_handler: EmbeddingHandler,
         collection_config: CollectionConfig,
-        top_k: int = 5
+        top_k: int = 5,
+        max_seq_length: int = ConfigLoader().get_embedding_config().max_seq_length,
     ):
         self.milvus = milvus_handler
         self.mongodb = mongodb_handler
@@ -73,9 +76,7 @@ class Retriever:
         self.milvus.load_collection(collection_name=self.collection_config.name)
         self.query_text = None
         self.chunker = RAGChunker(
-            emb_model_name=self.embedding.config.emb_model_name,
-            gen_model_name=ConfigLoader().get_generator_config().gen_model_name,
-            chunk_size=3500, # TODOD: [CodeReview] Move this to config file
+            chunk_size=max_seq_length,
             overlap=50
         )
 
@@ -142,7 +143,7 @@ class Retriever:
                 if mongodb_doc:
                     full_text = mongodb_doc.get(self.collection_config.text_field, "")
                 else:
-                    logger.error(f"Warning: Document with id {doc_id} not found in MongoDB")
+                    logger.warn(f"Warning: Document with id {doc_id} not found in MongoDB")
 
                 # Get relevant excerpt using Milvus embeddings
                 doc_embedding = np.array(entity.get(self.collection_config.vector_field, []))
