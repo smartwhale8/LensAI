@@ -12,27 +12,26 @@ import logging
 import torch
 
 class EmbeddingHandler:
-    def __init__(self, 
+    def __init__(self,
                  mongodb_handler, 
-                 mivus_handler
+                 mivus_handler,
+                 emb_model: SentenceTransformer,
+                 chunker : RAGChunker
         ):
         #self.logger = logger
-        self.config = ConfigLoader().get_embedding_config()
-        transformer = Transformer(self.config.emb_model_name, self.config.max_seq_length)
-        pooling = Pooling(transformer.get_word_embedding_dimension(), "mean")
-        self.model = SentenceTransformer(modules=[transformer, pooling]) # The Embedding model
+        #self.config = ConfigLoader().get_embedding_config()
+        #transformer = Transformer(self.config.emb_model_name, self.config.max_seq_length)
+        #pooling = Pooling(transformer.get_word_embedding_dimension(), "mean")
+        #self.model = SentenceTransformer(modules=[transformer, pooling]) # The Embedding model
+        self.model = emb_model
         self.mongodb_handler = mongodb_handler
         self.milvus_handler = mivus_handler
+        self.chunker = chunker
         #Check for GPU
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         # Initialize the RAGChunker
-        self.chunker = RAGChunker(
-            emb_model=self.model, # Pass the Embedding model to the RAGChunker
-            chunk_size=self.config.max_seq_length,
-            overlap=50,
-            store_tokens=True
-        )
+        
         # get handle to mongodb collections, eg acts_collection, case_files_collection
 
     def generate_embeddings(self, texts):
@@ -205,7 +204,7 @@ class EmbeddingHandler:
         with tqdm(total=len(acts), desc="Overall progress", unit="act", leave=False) as pbar:
             for act in acts:
                 original_text = self.prepare_text_for_embedding(act, "legal_acts")
-                chunks = self.chunker.chunk_document({"text": original_text}, method='tokens')
+                chunks = self.chunker.chunk_document({"text": original_text}, method='hybrid')
                 for chunk in chunks:
                     act_ids.append(act['act_id'])
                     chunk_ids.append(chunk['chunk_id'])

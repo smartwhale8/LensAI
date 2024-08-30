@@ -60,6 +60,7 @@ class Retriever:
         milvus_handler: MilvusHandler,
         mongodb_handler: MongoDBHandler,
         embedding_handler: EmbeddingHandler,
+        chunker: RAGChunker,
         collection_config: CollectionConfig,
         top_k: int = 5,
         max_seq_length: int = ConfigLoader().get_embedding_config().max_seq_length,
@@ -67,6 +68,7 @@ class Retriever:
         self.milvus = milvus_handler
         self.mongodb = mongodb_handler
         self.embedding = embedding_handler
+        self.chunker = chunker
         self.collection_config = collection_config
         self.top_k = top_k
         self.logger = logger
@@ -75,10 +77,7 @@ class Retriever:
             raise ConnectionError("Failed to connect to Milvus database")
         self.milvus.load_collection(collection_name=self.collection_config.name)
         self.query_text = None
-        self.chunker = RAGChunker(
-            chunk_size=max_seq_length,
-            overlap=50
-        )
+
 
     def retrieve(self, query_text: str, top_k: int = 4, threshold: float = 0.7) -> List[Dict[str, str]]:
         # Generate embedding for the query
@@ -115,7 +114,7 @@ class Retriever:
                 except AttributeError:
                     logger.error(f"Warning: Could not find {self.collection_config.id_field} in hit")
                     continue
-
+       
                 # Initialize the similar doc we are preparing
                 similar_doc = {
 					"metadata": {
@@ -124,7 +123,7 @@ class Retriever:
 					},
                     "text": None
                 }
-                
+
                 # Safely add output fields to metadata
                 for field in self.collection_config.output_fields:
                     try:
@@ -154,9 +153,13 @@ class Retriever:
                     logger.error(f"Error getting relevant excerpt for {doc_id}: {e}")
                     continue
 
-                similar_docs.append(similar_doc)
+                # we do this check before appending to similar_docs
+                if hit.get('distance') < threshold:
+                    similar_docs.append(similar_doc)
 
-        return similar_docs
+        # Sort the results by similarity score
+        similar_docs.sort(key=lambda x: x['metadata']['similarity_score'], reverse=True)
+        return similar_docs[:top_k]  # Return only the top_k most relevant docs
     
 
     def _get_relevant_excerpt_using_rag_chunker(self, full_text, query_embedding, doc_embedding, max_tokens=512):

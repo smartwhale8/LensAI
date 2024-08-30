@@ -3,6 +3,7 @@ from pymilvus.exceptions import SchemaNotReadyException
 from config.config import ConfigLoader
 from utils.logger.logging_config import logger
 from typing import Dict, Any
+import sys
 
 class MilvusHandler:
     def __init__(self):
@@ -49,7 +50,8 @@ class MilvusHandler:
             self.logger.info(f"Connected successfully")
         except Exception as e:
             self.logger.error(f"Failed to connect to Milvus: {str(e)}")
-            self.client = None
+            #self.client = None
+            sys.exit(1)
 
     def close_connection(self):
         # Close connection to Milvus server

@@ -10,6 +10,14 @@ from typing import List, Tuple
 from utils.logger.logging_config import logger
 from colorama import Fore, Style, Back, init
 
+
+## tODO: move this to a better place:
+from sentence_transformers import SentenceTransformer
+from sentence_transformers.models import Transformer, Pooling
+from config.config import ConfigLoader
+from rag.embedding.rag_chunker import RAGChunker
+
+
 class RAGOrchestrator:
     def __init__(self, mongodb, milvus, embedding, retriever, generator):
         self.mongodb = mongodb
@@ -52,6 +60,15 @@ class RAGOrchestrator:
         self.mongodb.close()
         self.milvus.close()
 
+def get_context(retreived_docs, max_tokens=2048):
+    context = ""
+    for doc in retreived_docs:
+        excerpt = doc["relevant_excerpt"]
+        if len(context) + len(excerpt) > max_tokens:
+            break
+        context += f"\n\nSource {doc['metadata']['act_id']}:\n{excerpt}"
+    return context.strip()
+
 def run_rag_pipeline():
     # Lazy imports
     from rag.database.mongodb_handler import MongoDBHandler
@@ -66,12 +83,30 @@ def run_rag_pipeline():
 
     with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, MilvusHandler() as milvus_handler:
         #Initialize RAG components        
-        embedding_handler = EmbeddingHandler(mongodb_handler, milvus_handler)
+
+        """
+        Create embedding model : sentence-transformers/all-mpnet-base-v2
+        Create Chunker object, passing it the embedding model
+        Create Retriever object, passing it the Milvus and MongoDB handlers, the embedding handler, and the collection config
+        Create Generator object
+        """
+        #TODO: Create a class that creates Models
+        # Create the Embedding model
+        config = ConfigLoader().get_embedding_config()
+        transformer = Transformer(config.emb_model_name, config.max_seq_length)
+        pooling = Pooling(transformer.get_word_embedding_dimension(), "mean")
+        emb_model = SentenceTransformer(modules=[transformer, pooling]) # The Embedding model
+
+        # Create the Chunker object
+        chunker = RAGChunker(emb_model=emb_model, chunk_size=config.max_seq_length, overlap=50, store_tokens=False) #store_toekns is True only when we want to store embeddings to Mivlus collection, not for 'inference'
+        
+        embedding_handler = EmbeddingHandler(emb_model, chunker, mongodb_handler, milvus_handler)
 
         retriever = Retriever(
             milvus_handler, 
             mongodb_handler, 
-            embedding_handler, 
+            embedding_handler,
+            chunker,
             CollectionConfigFactory.get_config("legal_acts")
         )
         generator = Generator()
@@ -88,14 +123,13 @@ def run_rag_pipeline():
 
             # Retrieve relevant documents (acts/case files) based on user query
             retrieved_docs = retriever.retrieve(query_text=user_query)
-            print(Fore.YELLOW + f"Retrieved {len(retrieved_docs)} documents.")
-
             if not retrieved_docs:
                 print(Fore.RED + "LegalGenie: I'm sorry, I couldn't find any relevant documents based on your query.")
                 continue
             else:
-                context = retrieved_docs[0]["relevant_excerpt"]  # Use the most similar document as context
-
+                print(Fore.YELLOW + f"Retrieved {len(retrieved_docs)} documents.")
+                context = get_context(retrieved_docs)
+                
             # Generate response
             #context = "\n".join([f"{msg[0]}: {msg[1]}" for msg in chat_history[-3:]])  # Use last 3 exchanges as context ?
             response = generator.generate(user_query, context)
@@ -126,7 +160,7 @@ def run_document_ingestion(folder_path, file_type):
         logger.error(f"Error: The folder path '{folder_path}' is not valid.")
         return
 
-    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler:
+    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai_hybrid") as mongodb_handler:
         # Initialize the ingestion handler
         ingestion_handler = DocumentIngestion(mongodb_handler, folder_path, file_type)
         ingestion_handler.ingest_from_folder()
@@ -140,17 +174,22 @@ def run_embedding_generation():
     from rag.database.milvus_handler import MilvusHandler  # Lazy import
     from rag.embedding.embedding_handler import EmbeddingHandler  # Lazy import
 
-    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai") as mongodb_handler, \
+    with MongoDBHandler(connection_string="mongodb://localhost:27017/", db_name="rag_lens_ai_hybrid") as mongodb_handler, \
          MilvusHandler() as milvus_handler:
         
         # Create mivlus collection
         milvus_handler.create_collection("legal_acts", force=True)
+        # Create the Embedding model
+        config = ConfigLoader().get_embedding_config()
+        transformer = Transformer(config.emb_model_name, config.max_seq_length)
+        pooling = Pooling(transformer.get_word_embedding_dimension(), "mean")
+        emb_model = SentenceTransformer(modules=[transformer, pooling]) # The Embedding model
+
+        # Create the Chunker object
+        chunker = RAGChunker(emb_model=emb_model, chunk_size=config.max_seq_length, overlap=50, store_tokens=False) #store_toekns is True only when we want to store embeddings to Mivlus collection, not for 'inference'
         
         # Initialize the embedding generator
-        embedding_generator = EmbeddingHandler(
-             mongodb_handler, 
-             milvus_handler
-             )
+        embedding_generator = EmbeddingHandler(mongodb_handler, milvus_handler, emb_model, chunker)
         # Generate and store embeddings for all documents in the legal_acts collection of MongoDB
         logger.info("Generating embeddings for legal acts...")
         embedding_generator.process_and_store_embeddings("legal_acts", batch_size=32)
